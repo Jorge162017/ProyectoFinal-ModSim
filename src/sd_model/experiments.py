@@ -3,45 +3,50 @@ from .params import Params
 from .seir_muscle import MuscleSEIRModel
 from .interventions import adherence_schedule, intensity_schedule, protein_schedule, deload_effects, piecewise_constant
 
-def build_A():
+def build_A(include_deload_in_intensity: bool = True):
     adh = adherence_schedule()
-    inten = intensity_schedule()
+    inten = intensity_schedule(include_deload=include_deload_in_intensity)
     prot = protein_schedule()
     def A(t: float) -> float:
         return np.clip(adh(t) * inten(t) * prot(t), 0.0, 2.0)
     return A
 
+
 def base_run(params: Params = None):
     if params is None:
         params = Params()
-    A = build_A()
-    g_gamma, g_phi = deload_effects()
+    A = build_A(include_deload_in_intensity=True)
+    g_gamma = lambda t: 1.0
+    g_phi   = lambda t: 1.0
     model = MuscleSEIRModel(params, A, g_gamma, g_phi)
     return model.simulate()
 
 def no_delay_run(params: Params = None):
     if params is None:
         params = Params()
-    # k=1 y alpha grande ~ sin retraso
     params2 = Params(**{**params.__dict__})
     params2.k = 1
-    params2.alpha = 5.0
-    A = build_A()
-    g_gamma, g_phi = deload_effects()
+    params2.alpha = 5.0  # sin retraso
+    A = build_A(include_deload_in_intensity=True)
+    g_gamma = lambda t: 1.0
+    g_phi   = lambda t: 1.0
     model = MuscleSEIRModel(params2, A, g_gamma, g_phi)
     return model.simulate()
+
 
 def deload_toggle_run(use_deload: bool, params: Params = None):
     if params is None:
         params = Params()
-    A = build_A()
+    # Entrenamiento igual para ambos: SIN bajón de intensidad en la ventana
+    A = build_A(include_deload_in_intensity=False)
     if use_deload:
-        g_gamma, g_phi = deload_effects()
+        g_gamma, g_phi = deload_effects()  # ventana y magnitud ya “marcadas”
     else:
         g_gamma = lambda t: 1.0
-        g_phi = lambda t: 1.0
+        g_phi   = lambda t: 1.0
     model = MuscleSEIRModel(params, A, g_gamma, g_phi)
     return model.simulate()
+
 
 def constant_A_run(adh=0.8, inten=1.0, prot=1.0, params: Params = None):
     if params is None:
@@ -97,24 +102,25 @@ from .interventions import microlesion_pulse, beta_decay
 def scenario_microlesion(params: Params=None):
     if params is None:
         params = Params()
-    A = build_A()
-    g_gamma, g_phi = deload_effects()
-    # Combinar pulso de microlesión sobre phi
-    pulse = microlesion_pulse()
-    phi_mod = lambda t: g_phi(t) * pulse(t)
-    model = MuscleSEIRModel(params, A, g_gamma, phi_mod)
+    A = build_A(include_deload_in_intensity=True)
+    # sin deload fisiológico:
+    g_gamma = lambda t: 1.0
+    # solo pulso de microlesión sobre phi:
+    pulse = microlesion_pulse()  # (45–55, 2.2x)
+    g_phi = pulse
+    model = MuscleSEIRModel(params, A, g_gamma, g_phi)
     return model.simulate()
 
 def scenario_stagnation(params: Params=None):
     if params is None:
         params = Params()
-    # Reduce beta efectivamente multiplicándose por una sigmoide en el tiempo
-    p2 = Params(**{**params.__dict__})
-    A = build_A()
-    g_gamma, g_phi = deload_effects()
-    # Emular decaimiento en beta con A(t)
-    dec = beta_decay()
+    A_base = build_A(include_deload_in_intensity=True)
+    dec = beta_decay()  # (t_half=110, depth=0.5)
     def A_mod(t: float):
-        return A(t) * dec(t)
-    model = MuscleSEIRModel(p2, A_mod, g_gamma, g_phi)
+        return A_base(t) * dec(t)
+    # sin deload fisiológico ni microlesión:
+    g_gamma = lambda t: 1.0
+    g_phi   = lambda t: 1.0
+    model = MuscleSEIRModel(params, A_mod, g_gamma, g_phi)
     return model.simulate()
+

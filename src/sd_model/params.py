@@ -12,8 +12,8 @@ class Params:
     beta: float = 0.55          # sensibilidad al estímulo
 
     # Cadena de retraso E (k etapas, media 1/alpha)
-    k: int = 3                  # orden de Erlang (>=1)
-    alpha: float = 0.35         # velocidad por etapa (1/días)
+    k: int = 5                  # orden de Erlang (>=1)
+    alpha: float = 0.18         # velocidad por etapa (1/días)
 
     # Recuperación/adaptación desde I
     gamma: float = 0.30         # tasa de adaptación (1/días)
